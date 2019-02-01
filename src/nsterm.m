@@ -425,7 +425,10 @@ static CGPoint menu_mouse_point;
                                | NSWindowStyleMaskResizable         \
                                | NSWindowStyleMaskMiniaturizable    \
                                | NSWindowStyleMaskClosable)
-#define FRAME_UNDECORATED_FLAGS NSWindowStyleMaskBorderless
+
+#define FRAME_UNDECORATED_FLAGS (NSWindowStyleMaskResizable         \
+                                 | NSWindowStyleMaskMiniaturizable  \
+                                 | NSWindowStyleMaskClosable)
 
 /* TODO: get rid of need for these forward declarations */
 static void ns_condemn_scroll_bars (struct frame *f);
@@ -1841,23 +1844,11 @@ x_set_undecorated (struct frame *f, Lisp_Object new_value, Lisp_Object old_value
     {
       block_input ();
 
-      if (NILP (new_value))
-        {
-          FRAME_UNDECORATED (f) = false;
-          [window setStyleMask: ((window.styleMask | FRAME_DECORATED_FLAGS)
-                                  ^ FRAME_UNDECORATED_FLAGS)];
+      [window setToolbar: nil];
+      /* Do I need to release the toolbar here? */
 
-          [view createToolbar: f];
-        }
-      else
-        {
-          [window setToolbar: nil];
-          /* Do I need to release the toolbar here? */
-
-          FRAME_UNDECORATED (f) = true;
-          [window setStyleMask: ((window.styleMask | FRAME_UNDECORATED_FLAGS)
-                                 ^ FRAME_DECORATED_FLAGS)];
-        }
+      FRAME_UNDECORATED (f) = true;
+      [window setStyleMask: (window.styleMask | FRAME_UNDECORATED_FLAGS)];
 
       /* At this point it seems we don't have an active NSResponder,
          so some key presses (TAB) are swallowed by the system. */
@@ -6837,36 +6828,7 @@ not_in_argv (NSString *arg)
   NSTRACE_MSG  ("Original columns: %d", cols);
   NSTRACE_MSG  ("Original rows: %d", rows);
 
-  if (! [self isFullscreen])
-    {
-      int toolbar_height;
-#ifdef NS_IMPL_GNUSTEP
-      // GNUstep does not always update the tool bar height.  Force it.
-      if (toolbar && [toolbar isVisible])
-          update_frame_tool_bar (emacsframe);
-#endif
-
-      toolbar_height = FRAME_TOOLBAR_HEIGHT (emacsframe);
-      if (toolbar_height < 0)
-        toolbar_height = 35;
-
-      extra = FRAME_NS_TITLEBAR_HEIGHT (emacsframe)
-        + toolbar_height;
-    }
-
-  if (wait_for_tool_bar)
-    {
-      /* The toolbar height is always 0 in fullscreen and undecorated
-         frames, so don't wait for it to become available. */
-      if (FRAME_TOOLBAR_HEIGHT (emacsframe) == 0
-          && FRAME_UNDECORATED (emacsframe) == false
-          && ! [self isFullscreen])
-        {
-          NSTRACE_MSG ("Waiting for toolbar");
-          return;
-        }
-      wait_for_tool_bar = NO;
-    }
+  wait_for_tool_bar = NO;
 
   neww = (int)wr.size.width - emacsframe->border_width;
   newh = (int)wr.size.height - extra;
@@ -7242,11 +7204,9 @@ not_in_argv (NSString *arg)
   maximizing_resize = NO;
 #endif
 
-  win = [[EmacsWindow alloc]
+  win = [[EmacsFSWindow alloc]
             initWithContentRect: r
-                      styleMask: (FRAME_UNDECORATED (f)
-                                  ? FRAME_UNDECORATED_FLAGS
-                                  : FRAME_DECORATED_FLAGS)
+                      styleMask: FRAME_UNDECORATED_FLAGS
                         backing: NSBackingStoreBuffered
                           defer: YES];
 
@@ -7278,10 +7238,6 @@ not_in_argv (NSString *arg)
   name = [NSString stringWithUTF8String:
                    NILP (tem) ? "Emacs" : SSDATA (tem)];
   [win setTitle: name];
-
-  /* toolbar support */
-  if (! FRAME_UNDECORATED (f))
-    [self createToolbar: f];
 
 #if defined (NS_IMPL_COCOA) && MAC_OS_X_VERSION_MAX_ALLOWED >= 101000
 #ifndef NSAppKitVersionNumber10_10
